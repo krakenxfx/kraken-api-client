@@ -47,7 +47,7 @@ class KrakenAPI
      * @param string $secret API secret
      * @param string $url base URL for Kraken API
      * @param string $version API version
-     * @param bool $sslverify enable/disable SSL peer verification.  disable if using beta.api.kraken.com
+     * @param bool $sslverify whether TLS peer verification is enabled; false is rejected to fail closed
      */
     function __construct($key, $secret, $url='https://api.kraken.com', $version='0', $sslverify=true)
     {
@@ -58,6 +58,13 @@ class KrakenAPI
          exit(1);
         }
 
+        $parsedUrl = parse_url($url);
+        if($parsedUrl === false || !isset($parsedUrl['scheme']) || strtolower($parsedUrl['scheme']) !== 'https' || empty($parsedUrl['host'])) {
+            throw new KrakenAPIException('API URL must be an absolute HTTPS URL.');
+        }
+        if(!$sslverify) {
+            throw new KrakenAPIException('TLS certificate verification cannot be disabled.');
+        }
         $this->key = $key;
         $this->secret = $secret;
         $this->url = $url;
@@ -69,7 +76,9 @@ class KrakenAPI
             CURLOPT_SSL_VERIFYHOST => 2,
             CURLOPT_USERAGENT => 'Kraken PHP API Agent',
             CURLOPT_POST => true,
-            CURLOPT_RETURNTRANSFER => true)
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT => 30)
         );
     }
 
@@ -100,11 +109,14 @@ class KrakenAPI
         $result = curl_exec($this->curl);
         if($result===false)
             throw new KrakenAPIException('CURL error: ' . curl_error($this->curl));
+        $httpCode = curl_getinfo($this->curl, CURLINFO_HTTP_CODE);
+        if($httpCode < 200 || $httpCode >= 300)
+            throw new KrakenAPIException('HTTP error: ' . $httpCode);
 
         // decode results
         $result = json_decode($result, true);
-        if(!is_array($result))
-            throw new KrakenAPIException('JSON decode error');
+        if(json_last_error() !== JSON_ERROR_NONE || !is_array($result))
+            throw new KrakenAPIException('JSON decode error: ' . json_last_error_msg());
 
         return $result;
     }
@@ -144,11 +156,14 @@ class KrakenAPI
         $result = curl_exec($this->curl);
         if($result===false)
             throw new KrakenAPIException('CURL error: ' . curl_error($this->curl));
+        $httpCode = curl_getinfo($this->curl, CURLINFO_HTTP_CODE);
+        if($httpCode < 200 || $httpCode >= 300)
+            throw new KrakenAPIException('HTTP error: ' . $httpCode);
 
         // decode results
         $result = json_decode($result, true);
-        if(!is_array($result))
-            throw new KrakenAPIException('JSON decode error');
+        if(json_last_error() !== JSON_ERROR_NONE || !is_array($result))
+            throw new KrakenAPIException('JSON decode error: ' . json_last_error_msg());
 
         return $result;
     }
